@@ -55,6 +55,7 @@ def handle_client(client_connection: socket.socket, client_address: Tuple[str, i
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((HOST, PORT))
         server_socket.listen(10)
         print(f"Server running at http://{HOST}:{PORT}")
