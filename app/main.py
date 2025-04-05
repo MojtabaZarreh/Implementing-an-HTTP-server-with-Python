@@ -3,7 +3,7 @@ import threading
 from typing import Tuple
 
 HOST = 'localhost'
-PORT = 3000
+PORT = 4221
 
 ROUTES = {
     '/': "Welcome to the Home Page!",
