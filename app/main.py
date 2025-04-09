@@ -45,7 +45,7 @@ def handle_client(client_connection: socket.socket, client_address: Tuple[str, i
                     body = ROUTES[path]
                     response = build_response(body)
                 case ('GET', path) if path.startswith('/echo'):
-                    body = path[5:]
+                    body = path[6:]
                     response = build_response(body)
                 case ('GET', _):
                     response = build_response("404 Not Found", status_code=404)
