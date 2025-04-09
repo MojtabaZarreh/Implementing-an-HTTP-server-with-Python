@@ -33,25 +33,29 @@ def parse_request(request_data: str) -> Tuple[str, str]:
     return method, path
 
 def handle_client(client_connection: socket.socket, client_address: Tuple[str, int]):
-    with client_connection:
-        try:
+    try:
+        with client_connection:
             request_data = client_connection.recv(1024).decode('utf-8')
             method, path = parse_request(request_data)
 
             print(f"[{client_address}] {method} {path}")
 
-            if method != 'GET':
-                body = "Method Not Allowed"
-                response = build_response(body, status_code=405)
-            elif path in ROUTES:
-                body = ROUTES[path]
-                response = build_response(body)
-            else:
-                response = build_response("404 Not Found", status_code=404)
+            match method, path:
+                case ('GET', path) if path in ROUTES:
+                    body = ROUTES[path]
+                    response = build_response(body)
+                case ('GET', path) if path.startswith('/echo'):
+                    body = path[5:]
+                    response = build_response(body)
+                case ('GET', _):
+                    response = build_response("404 Not Found", status_code=404)
+                case _:
+                    body = "Method Not Allowed"
+                    response = build_response(body, status_code=405)
 
             client_connection.sendall(response.encode('utf-8'))
-        except Exception as e:
-            print(f"[{client_address}] Error:", e)
+    except Exception as e:
+        print(f"[{client_address}] Error: {e}")
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
