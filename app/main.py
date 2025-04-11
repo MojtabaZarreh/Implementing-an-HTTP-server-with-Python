@@ -1,76 +1,100 @@
 import socket
-import threading
-from typing import Tuple
+from concurrent.futures import ThreadPoolExecutor
+from typing import Tuple, Dict, Callable
 
 HOST = 'localhost'
 PORT = 4221
 
-ROUTES = {
-    '/': "Welcome to the Home Page!",
-    '/hello': "Hello there!",
-}
+class HTTPStatus:
+    OK = 200
+    NOT_FOUND = 404
+    METHOD_NOT_ALLOWED = 405
 
-def build_response(body: str, status_code: int = 200) -> str:
-    status_text = {
-        200: "OK",
-        404: "Not Found"
-    }.get(status_code, "OK")
-    
-    return (
-        f"HTTP/1.1 {status_code} {status_text}\r\n"
-        "Content-Type: text/plain\r\n"
-        f"Content-Length: {len(body)}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        f"{body}"
-    )
+    status_messages = {
+        OK: "OK",
+        NOT_FOUND: "Not Found",
+        METHOD_NOT_ALLOWED: "Method Not Allowed",
+    }
 
-def parse_request(request_data: str) -> Tuple[str, str]:
-    lines = request_data.splitlines()
-    if not lines:
-        return "", ""
-    method, path, *_ = lines[0].split()
-    return method, path
+    @classmethod
+    def get_message(cls, code: int) -> str:
+        return cls.status_messages.get(code, "Unknown")
 
-def handle_client(client_connection: socket.socket, client_address: Tuple[str, int]):
-    try:
-        with client_connection:
-            request_data = client_connection.recv(1024).decode('utf-8')
-            method, path = parse_request(request_data)
+class Router:
+    def __init__(self):
+        self.routes: Dict[str, Callable[[], str]] = {}
 
-            print(f"[{client_address}] {method} {path}")
+    def add_route(self, path: str, handler: Callable[[], str]):
+        self.routes[path] = handler
 
-            match method, path:
-                case ('GET', path) if path in ROUTES:
-                    body = ROUTES[path]
-                    response = build_response(body)
-                case ('GET', path) if path.startswith('/echo'):
-                    body = path[6:]
-                    response = build_response(body)
-                case ('GET', _):
-                    response = build_response("404 Not Found", status_code=404)
-                case _:
-                    body = "Method Not Allowed"
-                    response = build_response(body, status_code=405)
+    def resolve(self, method: str, path: str) -> Tuple[int, str]:
+        if method != 'GET':
+            return HTTPStatus.METHOD_NOT_ALLOWED, "Method Not Allowed"
+        if path in self.routes:
+            return HTTPStatus.OK, self.routes[path]()
+        elif path.startswith('/echo'):
+            return HTTPStatus.OK, path[6:]
+        else:
+            return HTTPStatus.NOT_FOUND, "404 Not Found"
 
-            client_connection.sendall(response.encode('utf-8'))
-    except Exception as e:
-        print(f"[{client_address}] Error: {e}")
+class HTTPServer:
+    def __init__(self, host: str, port: int, router: Router):
+        self.host = host
+        self.port = port
+        self.router = router
+
+    def start(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_socket.bind((self.host, self.port))
+            server_socket.listen(100)
+            print(f"Server running at http://{self.host}:{self.port}")
+
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                while True:
+                    client_conn, client_addr = server_socket.accept()
+                    executor.submit(self.handle_client, client_conn, client_addr)
+
+    def handle_client(self, conn: socket.socket, addr: Tuple[str, int]):
+        try:
+            with conn:
+                data = conn.recv(1024).decode('utf-8')
+                method, path = self.parse_request(data)
+
+                print(f"[{addr}] {method} {path}")
+
+                status_code, body = self.router.resolve(method, path)
+                response = self.build_response(body, status_code)
+                conn.sendall(response.encode('utf-8'))
+
+        except Exception as e:
+            print(f"[{addr}] Error: {e}")
+
+    def parse_request(self, request_data: str) -> Tuple[str, str]:
+        lines = request_data.splitlines()
+        if not lines:
+            return "", ""
+        method, path, *_ = lines[0].split()
+        return method, path
+
+    def build_response(self, body: str, status_code: int = 200) -> str:
+        status_text = HTTPStatus.get_message(status_code)
+        return (
+            f"HTTP/1.1 {status_code} {status_text}\r\n"
+            "Content-Type: text/plain\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            f"{body}"
+        )
+
 
 def main():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind((HOST, PORT))
-        server_socket.listen(10)
-        print(f"Server running at http://{HOST}:{PORT}")
-
-        while True:
-            client_conn, client_addr = server_socket.accept()
-            threading.Thread(
-                target=handle_client,
-                args=(client_conn, client_addr),
-                daemon=True
-            ).start()
+    router = Router()
+    router.add_route("/", lambda: "Welcome to the Home Page!")
+    router.add_route("/hello", lambda: "Hello there!")
+    server = HTTPServer(HOST, PORT, router)
+    server.start()
 
 if __name__ == "__main__":
     main()
