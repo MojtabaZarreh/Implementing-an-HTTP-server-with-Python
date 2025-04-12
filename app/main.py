@@ -27,13 +27,15 @@ class Router:
     def add_route(self, path: str, handler: Callable[[], str]):
         self.routes[path] = handler
 
-    def resolve(self, method: str, path: str) -> Tuple[int, str]:
+    def resolve(self, method: str, path: str, user_agent: str) -> Tuple[int, str]:
         if method != 'GET':
             return HTTPStatus.METHOD_NOT_ALLOWED, "Method Not Allowed"
         if path in self.routes:
             return HTTPStatus.OK, self.routes[path]()
         elif path.startswith('/echo'):
             return HTTPStatus.OK, path[6:]
+        elif path.startswith('/user-agent'):
+            return HTTPStatus.OK, user_agent
         else:
             return HTTPStatus.NOT_FOUND, "404 Not Found"
 
@@ -59,11 +61,11 @@ class HTTPServer:
         try:
             with conn:
                 data = conn.recv(1024).decode('utf-8')
-                method, path = self.parse_request(data)
+                method, path, user_agent = self.parse_request(data)
 
                 print(f"[{addr}] {method} {path}")
 
-                status_code, body = self.router.resolve(method, path)
+                status_code, body = self.router.resolve(method, path, user_agent)
                 response = self.build_response(body, status_code)
                 conn.sendall(response.encode('utf-8'))
 
@@ -75,7 +77,10 @@ class HTTPServer:
         if not lines:
             return "", ""
         method, path, *_ = lines[0].split()
-        return method, path
+        user_agent = next(
+            (line.split(":", 1)[1].strip() for line in lines if line.lower().startswith("user-agent:")),
+            "")
+        return method, path, user_agent
 
     def build_response(self, body: str, status_code: int = 200) -> str:
         status_text = HTTPStatus.get_message(status_code)
