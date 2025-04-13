@@ -53,7 +53,7 @@ class Router:
             if body:
                 return HTTPStatus.OK, 'application/octet-stream', body
             else :
-                return HTTPStatus.METHOD_NOT_ALLOWED, content_type, "Method Not Allowed"  
+                return HTTPStatus.NOT_FOUND, content_type, "404 Not Found" 
         else:
             return HTTPStatus.NOT_FOUND, content_type, "404 Not Found"
 
