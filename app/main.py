@@ -50,6 +50,7 @@ class Router:
             directory = sys.argv[2]
             filename = path[7:]
             body = self.handle_files(f'/{directory}/{filename}')
+            print(body)
             if body:
                 return HTTPStatus.OK, 'application/octet-stream', body
             else :
