@@ -50,7 +50,6 @@ class Router:
             directory = sys.argv[2]
             filename = path[7:]
             body = self.handle_files(f'/{directory}/{filename}')
-            print(body)
             if body:
                 return HTTPStatus.OK, 'application/octet-stream', body
             else :
@@ -106,7 +105,7 @@ class HTTPServer:
         status_text = HTTPStatus.get_message(status_code)
         return (
             f"HTTP/1.1 {status_code} {status_text}\r\n"
-            "Content-Type: {content_type}\r\n"
+            f"Content-Type: {content_type}\r\n"
             f"Content-Length: {len(body)}\r\n"
             "Connection: close\r\n"
             "\r\n"
