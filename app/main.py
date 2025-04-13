@@ -1,6 +1,7 @@
 import socket
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple, Dict, Callable
+import sys
 
 HOST = 'localhost'
 PORT = 4221
@@ -36,6 +37,14 @@ class Router:
             return HTTPStatus.OK, path[6:]
         elif path.startswith('/user-agent'):
             return HTTPStatus.OK, user_agent
+        elif path.startswith('/files'):
+            directory = sys.argv[2]
+            filename = path[7:]
+            body = HTTPServer().handle_files(f'/{directory}/{filename}')
+            if body:
+                return HTTPStatus.OK, body
+            else :
+                return HTTPStatus.METHOD_NOT_ALLOWED, "Method Not Allowed"  
         else:
             return HTTPStatus.NOT_FOUND, "404 Not Found"
 
@@ -56,6 +65,14 @@ class HTTPServer:
                 while True:
                     client_conn, client_addr = server_socket.accept()
                     executor.submit(self.handle_client, client_conn, client_addr)
+    
+    def handle_files(self, file_path: str): 
+        try:
+            with open(file_path, "r") as f:
+                body = f.read
+                return body
+        except Exception as e:
+            return False
 
     def handle_client(self, conn: socket.socket, addr: Tuple[str, int]):
         try:
@@ -74,6 +91,7 @@ class HTTPServer:
 
     def parse_request(self, request_data: str) -> Tuple[str, str]:
         lines = request_data.splitlines()
+        print(lines)
         if not lines:
             return "", ""
         method, path, *_ = lines[0].split()
