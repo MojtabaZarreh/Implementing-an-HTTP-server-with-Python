@@ -1,83 +1,69 @@
 import socket
 import sys
-import logging
-from pathlib import Path
 from typing import Callable, Dict, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
-import mimetypes
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-
-HOST = 'localhost'
-PORT = 4221
 
 class HTTPStatus:
     OK = 200
     NOT_FOUND = 404
     METHOD_NOT_ALLOWED = 405
 
-    status_messages = {
-        OK: "OK",
-        NOT_FOUND: "Not Found",
-        METHOD_NOT_ALLOWED: "Method Not Allowed",
+    messages = {
+        OK: 'OK',
+        NOT_FOUND: 'Not Found',
+        METHOD_NOT_ALLOWED: 'Method Not Allowed',
     }
 
-    @classmethod
-    def get_message(cls, code: int) -> str:
-        return cls.status_messages.get(code, "Unknown")
+    @staticmethod
+    def get_message(code):
+        return HTTPStatus.messages.get(code, '')
 
 
 class Router:
     def __init__(self):
-        self.routes: Dict[str, Callable[[], str]] = {}
+        self.routes: dict[str, Callable[[], str]] = {}
 
     def add_route(self, path: str, handler: Callable[[], str]):
         self.routes[path] = handler
 
-    def resolve(self, method: str, path: str, user_agent: str) -> Tuple[int, str, str]:
+    def resolve(self, method: str, path: str, user_agent: str) -> tuple[int, str, str]:
         if method != 'GET':
-            return HTTPStatus.METHOD_NOT_ALLOWED, 'text/plain', "Method Not Allowed"
+            return HTTPStatus.METHOD_NOT_ALLOWED, 'text/plain', 'Method Not Allowed'
 
         if path in self.routes:
             return HTTPStatus.OK, 'text/plain', self.routes[path]()
-        if path.startswith('/echo'):
-            return self.handle_echo(path)
+
+        if path.startswith('/echo/'):
+            return HTTPStatus.OK, 'text/plain', path[len('/echo/'):]
+
         if path.startswith('/user-agent'):
-            return self.handle_user_agent(user_agent)
-        if path.startswith('/files'):
-            return self.handle_static_file(path)
-        
-        return HTTPStatus.NOT_FOUND, 'text/plain', "404 Not Found"
+            return HTTPStatus.OK, 'text/plain', user_agent
 
-    def handle_echo(self, path: str) -> Tuple[int, str, str]:
-        return HTTPStatus.OK, 'text/plain', path[len('/echo/'):]
+        if path.startswith('/files/'):
+            return self._serve_file(path)
 
-    def handle_user_agent(self, user_agent: str) -> Tuple[int, str, str]:
-        return HTTPStatus.OK, 'text/plain', user_agent
+        return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
 
-    def handle_static_file(self, path: str) -> Tuple[int, str, str]:
-        # if len(sys.argv) < 3:
-        #     return HTTPStatus.NOT_FOUND, 'text/plain', "404 Not Found"
+    def _serve_file(self, path: str) -> tuple[int, str, str]:
+        if len(sys.argv) < 3:
+            return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
 
-        directory = Path(sys.argv[2])
-        filename = path[len('/files'):]
-        file_path = directory / filename
+        directory = sys.argv[2]
+        filename = path[len('/files/'):]
+        file_path = f'{directory}/{filename}'
 
-        content = self.read_file(file_path)
+        content = self._read_file(file_path)
         if content is None:
-            return HTTPStatus.NOT_FOUND, 'text/plain', "404 Not Found"
+            return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
+        return HTTPStatus.OK, 'application/octet-stream', content
 
-        content_type = mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
-        return HTTPStatus.OK, content_type, content
-
-    def read_file(self, file_path: Path) -> Optional[str]:
+    def _read_file(self, file_path: str) -> str | None:
         try:
-            if file_path.is_file():
-                return file_path.read_text()
-        except Exception as e:
-            logging.error(f"Error reading file {file_path}: {e}")
-        return None
+            with open(file_path, 'r') as f:
+                return f.read()
+        except Exception:
+            return None
 
 
 class HTTPServer:
@@ -91,63 +77,61 @@ class HTTPServer:
             server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server_socket.bind((self.host, self.port))
             server_socket.listen(100)
-            logging.info(f"Server running at http://{self.host}:{self.port}")
+            print(f'Server running at http://{self.host}:{self.port}')
 
-            with ThreadPoolExecutor(max_workers=20) as executor:
+            with ThreadPoolExecutor(max_workers=10) as executor:
                 while True:
-                    client_conn, client_addr = server_socket.accept()
-                    executor.submit(self.handle_client, client_conn, client_addr)
+                    conn, addr = server_socket.accept()
+                    executor.submit(self._handle_client, conn, addr)
 
-    def handle_client(self, conn: socket.socket, addr: Tuple[str, int]):
+    def _handle_client(self, conn: socket.socket, addr: tuple):
         try:
             with conn:
-                data = conn.recv(1024).decode('utf-8')
-                method, path, user_agent = self.parse_request(data)
+                request_data = conn.recv(1024).decode('utf-8')
+                method, path, user_agent = self._parse_request(request_data)
+                print(f'[{addr}] {method} {path}')
 
-                logging.info(f"[{addr}] {method} {path}")
-
-                status_code, content_type, body = self.router.resolve(method, path, user_agent)
-                response = self.build_response(body, content_type, status_code)
+                status, content_type, body = self.router.resolve(method, path, user_agent)
+                response = self._build_response(status, content_type, body)
                 conn.sendall(response.encode('utf-8'))
         except Exception as e:
-            logging.error(f"[{addr}] Error: {e}")
+            print(f'[{addr}] Error: {e}')
 
-    def parse_request(self, request_data: str) -> Tuple[str, str, str]:
-        lines = request_data.splitlines()
+    def _parse_request(self, request: str) -> tuple[str, str, str]:
+        lines = request.splitlines()
         if not lines:
-            return "", "", ""
-        try:
-            method, path, *_ = lines[0].split()
-            user_agent = ""
-            for line in lines:
-                if line.lower().startswith("user-agent:"):
-                    user_agent = line.split(":", 1)[1].strip()
-                    break
-            return method, path, user_agent
-        except Exception as e:
-            logging.warning(f"Malformed request: {e}")
-            return "", "", ""
+            return '', '', ''
 
-    def build_response(self, body: str, content_type: str, status_code: int) -> str:
-        status_text = HTTPStatus.get_message(status_code)
+        method, path, *_ = lines[0].split()
+        user_agent = ''
+
+        for line in lines:
+            if line.lower().startswith('user-agent:'):
+                user_agent = line.split(':', 1)[1].strip()
+                break
+
+        return method, path, user_agent
+
+    def _build_response(self, status: int, content_type: str, body: str) -> str:
+        status_text = HTTPStatus.get_message(status)
         return (
-            f"HTTP/1.1 {status_code} {status_text}\r\n"
-            f"Content-Type: {content_type}\r\n"
-            f"Content-Length: {len(body.encode('utf-8'))}\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            f"{body}"
+            f'HTTP/1.1 {status} {status_text}\r\n'
+            f'Content-Type: {content_type}\r\n'
+            f'Content-Length: {len(body.encode("utf-8"))}\r\n'
+            'Connection: close\r\n'
+            '\r\n'
+            f'{body}'
         )
 
 
 def main():
     router = Router()
-    router.add_route("/", lambda: "Welcome to the Home Page!")
-    router.add_route("/hello", lambda: "Hello there!")
-    
-    server = HTTPServer(HOST, PORT, router)
+    router.add_route('/', lambda: 'Welcome to the home page!')
+    router.add_route('/hello', lambda: 'Hello, world!')
+
+    server = HTTPServer('localhost', 4221, router)
     server.start()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
