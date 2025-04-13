@@ -27,26 +27,35 @@ class Router:
 
     def add_route(self, path: str, handler: Callable[[], str]):
         self.routes[path] = handler
+    
+    def handle_files(self, file_path: str): 
+        try:
+            with open(file_path, "r") as f:
+                body = f.read
+                return body
+        except Exception as e:
+            return False
 
     def resolve(self, method: str, path: str, user_agent: str) -> Tuple[int, str]:
+        content_type = 'text/plain'
         if method != 'GET':
             return HTTPStatus.METHOD_NOT_ALLOWED, "Method Not Allowed"
         if path in self.routes:
-            return HTTPStatus.OK, self.routes[path]()
+            return HTTPStatus.OK, content_type, self.routes[path]()
         elif path.startswith('/echo'):
-            return HTTPStatus.OK, path[6:]
+            return HTTPStatus.OK, content_type, path[6:]
         elif path.startswith('/user-agent'):
-            return HTTPStatus.OK, user_agent
+            return HTTPStatus.OK, content_type, user_agent
         elif path.startswith('/files'):
             directory = sys.argv[2]
             filename = path[7:]
-            body = HTTPServer(HOST, PORT, Router()).handle_files(f'/{directory}/{filename}')
+            body = self.handle_files(f'/{directory}/{filename}')
             if body:
-                return HTTPStatus.OK, body
+                return HTTPStatus.OK, 'application/octet-stream', body
             else :
-                return HTTPStatus.METHOD_NOT_ALLOWED, "Method Not Allowed"  
+                return HTTPStatus.METHOD_NOT_ALLOWED, content_type, "Method Not Allowed"  
         else:
-            return HTTPStatus.NOT_FOUND, "404 Not Found"
+            return HTTPStatus.NOT_FOUND, content_type, "404 Not Found"
 
 class HTTPServer:
     def __init__(self, host: str, port: int, router: Router):
@@ -65,14 +74,6 @@ class HTTPServer:
                 while True:
                     client_conn, client_addr = server_socket.accept()
                     executor.submit(self.handle_client, client_conn, client_addr)
-    
-    def handle_files(self, file_path: str): 
-        try:
-            with open(file_path, "r") as f:
-                body = f.read
-                return body
-        except Exception as e:
-            return False
 
     def handle_client(self, conn: socket.socket, addr: Tuple[str, int]):
         try:
@@ -82,8 +83,8 @@ class HTTPServer:
 
                 print(f"[{addr}] {method} {path}")
 
-                status_code, body = self.router.resolve(method, path, user_agent)
-                response = self.build_response(body, status_code)
+                status_code, content_type, body = self.router.resolve(method, path, user_agent)
+                response = self.build_response(body, content_type, status_code)
                 conn.sendall(response.encode('utf-8'))
 
         except Exception as e:
@@ -100,11 +101,11 @@ class HTTPServer:
             "")
         return method, path, user_agent
 
-    def build_response(self, body: str, status_code: int = 200) -> str:
+    def build_response(self, body: str, content_type: str, status_code: int = 200) -> str:
         status_text = HTTPStatus.get_message(status_code)
         return (
             f"HTTP/1.1 {status_code} {status_text}\r\n"
-            "Content-Type: text/plain\r\n"
+            "Content-Type: {content_type}\r\n"
             f"Content-Length: {len(body)}\r\n"
             "Connection: close\r\n"
             "\r\n"
