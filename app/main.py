@@ -57,8 +57,8 @@ class Router:
         return HTTPStatus.OK, 'text/plain', user_agent
 
     def handle_static_file(self, path: str) -> Tuple[int, str, str]:
-        if len(sys.argv) < 3:
-            return HTTPStatus.NOT_FOUND, 'text/plain', "404 Not Found"
+        # if len(sys.argv) < 3:
+        #     return HTTPStatus.NOT_FOUND, 'text/plain', "404 Not Found"
 
         directory = Path(sys.argv[2])
         filename = path[len('/files'):]
