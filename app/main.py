@@ -31,7 +31,7 @@ class Router:
     def handle_files(self, file_path: str): 
         try:
             with open(file_path, "r") as f:
-                body = f.read
+                body = f.read()
                 return body
         except Exception as e:
             return False
