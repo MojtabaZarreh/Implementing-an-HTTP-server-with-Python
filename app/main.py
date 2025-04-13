@@ -40,7 +40,7 @@ class Router:
         elif path.startswith('/files'):
             directory = sys.argv[2]
             filename = path[7:]
-            body = HTTPServer().handle_files(f'/{directory}/{filename}')
+            body = HTTPServer(HOST, PORT, Router()).handle_files(f'/{directory}/{filename}')
             if body:
                 return HTTPStatus.OK, body
             else :
