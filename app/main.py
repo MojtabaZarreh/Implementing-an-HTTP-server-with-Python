@@ -2,6 +2,7 @@ import socket
 import sys
 from typing import Callable, Dict, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
+import os
 
 
 class HTTPStatus:
@@ -28,7 +29,7 @@ class Router:
         self.routes[path] = handler
 
     def resolve(self, method: str, path: str, user_agent: str) -> tuple[int, str, str]:
-        if method != 'GET':
+        if method not in ('GET', 'POST'):
             return HTTPStatus.METHOD_NOT_ALLOWED, 'text/plain', 'Method Not Allowed'
 
         if path in self.routes:
@@ -40,12 +41,12 @@ class Router:
         if path.startswith('/user-agent'):
             return HTTPStatus.OK, 'text/plain', user_agent
 
-        if path.startswith('/files/'):
-            return self._serve_file(path)
+        if path.startswith('/files/'):        
+            return self._serve_file(path, method)
 
         return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
-
-    def _serve_file(self, path: str) -> tuple[int, str, str]:
+        
+    def _serve_file(self, path: str, method: str) -> tuple[int, str, str]:
         if len(sys.argv) < 3:
             return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
 
@@ -53,10 +54,35 @@ class Router:
         filename = path[len('/files/'):]
         file_path = f'{directory}/{filename}'
 
-        content = self._read_file(file_path)
-        if content is None:
-            return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
-        return HTTPStatus.OK, 'application/octet-stream', content
+        if method == 'GET':
+            content = self._read_file(file_path)
+            if content is None:
+                return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
+            return HTTPStatus.OK, 'application/octet-stream', content
+
+        elif method == 'POST':
+            try:
+                content_length = int(os.environ.get("CONTENT_LENGTH", 0))
+                body = sys.stdin.read(content_length)
+                success = self._create_file(file_path, body)
+                if success:
+                    return 201, 'text/plain', 'Created'
+                else:
+                    return HTTPStatus.INTERNAL_SERVER_ERROR, 'text/plain', 'Failed to create file'
+            except Exception as e:
+                print(f"Error: {e}")
+                return HTTPStatus.INTERNAL_SERVER_ERROR, 'text/plain', 'Error processing request'
+            
+        return HTTPStatus.METHOD_NOT_ALLOWED, 'text/plain', 'Method Not Allowed'
+
+    def _create_file(self, file_path: str, content: str) -> bool:
+        try:
+            with open(file_path, 'w') as f:
+                f.write(content)
+            return True
+        except Exception as e:
+            print(f"Error writing file: {e}")
+            return False
 
     def _read_file(self, file_path: str) -> str | None:
         try:
@@ -64,6 +90,7 @@ class Router:
                 return f.read()
         except Exception:
             return None
+
 
 
 class HTTPServer:
