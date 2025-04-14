@@ -66,11 +66,13 @@ class Router:
             try:
                 # content_length = int(os.environ.get("CONTENT_LENGTH", 0))
                 # body = sys.stdin.read(content_length)
-                success = self._create_file(file_path, sys.argv[3])
+                print(sys.argv[2])
+                print(sys.argv[3])
+                success = self._create_file(file_path, sys.argv[2])
                 if success:
                     return HTTPStatus.CREATED, 'application/octet-stream'
                 else:
-                    return HTTPStatus.INTERNAL_SERVER_ERROR, 'text/plain', 'Failed to create file'
+                    return HTTPStatus.NOT_FOUND, 'text/plain', 'Failed to create file'
             except Exception as e:
                 print(f"Error: {e}")
                 return HTTPStatus.INTERNAL_SERVER_ERROR, 'text/plain', 'Error processing request'
