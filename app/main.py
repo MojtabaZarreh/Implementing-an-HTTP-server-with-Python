@@ -30,7 +30,7 @@ class Router:
     def add_route(self, path: str, handler: Callable[[], str]):
         self.routes[path] = handler
 
-    def resolve(self, method: str, path: str, user_agent: str) -> tuple[int, str, str]:
+    def resolve(self, method: str, path: str, user_agent: str, body: str = '') -> tuple[int, str, str]:
         if method not in ('GET', 'POST'):
             return HTTPStatus.METHOD_NOT_ALLOWED, 'text/plain', 'Method Not Allowed'
 
@@ -43,40 +43,33 @@ class Router:
         if path.startswith('/user-agent'):
             return HTTPStatus.OK, 'text/plain', user_agent
 
-        if path.startswith('/files/'):        
-            return self._serve_file(path, method)
+        if path.startswith('/files/'):
+            return self._serve_file(path, method, body)
 
         return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
-        
-    def _serve_file(self, path: str, method: str) -> tuple[int, str, str]:
+
+    def _serve_file(self, path: str, method: str, body: str) -> tuple[int, str, str]:
         if len(sys.argv) < 3:
             return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
 
         directory = sys.argv[2]
         filename = path[len('/files/'):]
-        file_path = f'{directory}/{filename}'
 
         if method == 'GET':
+            file_path = f'{directory}/{filename}'
             content = self._read_file(file_path)
             if content is None:
                 return HTTPStatus.NOT_FOUND, 'text/plain', '404 Not Found'
             return HTTPStatus.OK, 'application/octet-stream', content
 
         elif method == 'POST':
-            try:
-                # content_length = int(os.environ.get("CONTENT_LENGTH", 0))
-                # body = sys.stdin.read(content_length)
-                print(sys.argv[2])
-                print(sys.argv[3])
-                success = self._create_file(file_path, sys.argv[2])
-                if success:
-                    return HTTPStatus.CREATED, 'application/octet-stream'
-                else:
-                    return HTTPStatus.NOT_FOUND, 'text/plain', 'Failed to create file'
-            except Exception as e:
-                print(f"Error: {e}")
-                return HTTPStatus.INTERNAL_SERVER_ERROR, 'text/plain', 'Error processing request'
-            
+            file_path = f'{directory}/{filename}'
+            success = self._create_file(file_path, body)
+            if success:
+                return HTTPStatus.CREATED, 'application/octet-stream', ''
+            else:
+                return HTTPStatus.NOT_FOUND, 'text/plain', 'Failed to create file'
+
         return HTTPStatus.METHOD_NOT_ALLOWED, 'text/plain', 'Method Not Allowed'
 
     def _create_file(self, file_path: str, content: str) -> bool:
@@ -119,29 +112,35 @@ class HTTPServer:
         try:
             with conn:
                 request_data = conn.recv(1024).decode('utf-8')
-                method, path, user_agent = self._parse_request(request_data)
+                method, path, user_agent, body = self._parse_request(request_data)
                 print(f'[{addr}] {method} {path}')
 
-                status, content_type, body = self.router.resolve(method, path, user_agent)
-                response = self._build_response(status, content_type, body)
+                status, content_type, response_body = self.router.resolve(method, path, user_agent, body)
+                response = self._build_response(status, content_type, response_body)
                 conn.sendall(response.encode('utf-8'))
         except Exception as e:
             print(f'[{addr}] Error: {e}')
 
-    def _parse_request(self, request: str) -> tuple[str, str, str]:
+    def _parse_request(self, request: str) -> tuple[str, str, str, str]:
         lines = request.splitlines()
         if not lines:
-            return '', '', ''
+            return '', '', '', ''
 
         method, path, *_ = lines[0].split()
         user_agent = ''
+        body = ''
+        content_length = 0
 
         for line in lines:
             if line.lower().startswith('user-agent:'):
                 user_agent = line.split(':', 1)[1].strip()
-                break
+            elif line.lower().startswith('content-length:'):
+                content_length = int(line.split(':', 1)[1].strip())
 
-        return method, path, user_agent
+        if content_length > 0:
+            body = request[-content_length:]  # Last part of the request is the body
+
+        return method, path, user_agent, body
 
     def _build_response(self, status: int, content_type: str, body: str) -> str:
         status_text = HTTPStatus.get_message(status)
