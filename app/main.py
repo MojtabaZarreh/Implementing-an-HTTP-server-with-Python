@@ -9,11 +9,13 @@ class HTTPStatus:
     OK = 200
     NOT_FOUND = 404
     METHOD_NOT_ALLOWED = 405
+    CREATED = 200
 
     messages = {
         OK: 'OK',
         NOT_FOUND: 'Not Found',
         METHOD_NOT_ALLOWED: 'Method Not Allowed',
+        CREATED: 'Created'
     }
 
     @staticmethod
@@ -66,7 +68,7 @@ class Router:
                 body = sys.stdin.read(content_length)
                 success = self._create_file(file_path, body)
                 if success:
-                    return 201, 'text/plain', 'Created'
+                    return HTTPStatus.CREATED, 'application/octet-stream'
                 else:
                     return HTTPStatus.INTERNAL_SERVER_ERROR, 'text/plain', 'Failed to create file'
             except Exception as e:
