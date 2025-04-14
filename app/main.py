@@ -64,9 +64,9 @@ class Router:
 
         elif method == 'POST':
             try:
-                content_length = int(os.environ.get("CONTENT_LENGTH", 0))
-                body = sys.stdin.read(content_length)
-                success = self._create_file(file_path, body)
+                # content_length = int(os.environ.get("CONTENT_LENGTH", 0))
+                # body = sys.stdin.read(content_length)
+                success = self._create_file(file_path, sys.argv[3])
                 if success:
                     return HTTPStatus.CREATED, 'application/octet-stream'
                 else:
