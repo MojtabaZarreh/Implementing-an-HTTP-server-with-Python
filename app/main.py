@@ -2,7 +2,6 @@ import socket
 import sys
 from typing import Callable, Dict, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
-import os
 
 
 class HTTPStatus:
@@ -21,6 +20,7 @@ class HTTPStatus:
     @staticmethod
     def get_message(code):
         return HTTPStatus.messages.get(code, '')
+
 
 
 class Router:
@@ -138,7 +138,7 @@ class HTTPServer:
                 content_length = int(line.split(':', 1)[1].strip())
 
         if content_length > 0:
-            body = request[-content_length:]  # Last part of the request is the body
+            body = request[-content_length:]  
 
         return method, path, user_agent, body
 
