@@ -14,24 +14,12 @@ and more.
 **Note**: If you're viewing this repo on GitHub, head over to
 [codecrafters.io](https://codecrafters.io) to try the challenge.
 
-# Passing the first stage
+## About the Project
 
-The entry point for your HTTP server implementation is in `app/main.py`. Study
-and uncomment the relevant code, and push your changes to pass the first stage:
+This project is a simple HTTP server implemented in pure Python using low-level socket programming. It was developed as part of a learning exercise to better understand how HTTP servers work under the hood, without relying on external frameworks like Flask or FastAPI.
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+The server supports basic `GET` and `POST` requests and provides a lightweight routing system. It includes support for dynamic endpoints such as `/echo/<message>` which returns the message back, `/user-agent` which returns the client's user agent, and `/files/<filename>` for serving and saving files.
 
-Time to move on to the next stage!
+A `Router` class is used to map paths to handler functions, and a `ThreadPoolExecutor` is used to allow handling multiple clients concurrently in a simple multi-threaded fashion.
 
-# Stage 2 & beyond
-
-Note: This section is for stages 2 and beyond.
-
-1. Ensure you have `python (3.11)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `app/main.py`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+Please note that this implementation is intended for **testing and educational purposes only**. For production-level or large-scale systems, **asynchronous (async) approaches** using libraries like `asyncio`, `aiohttp`, or ASGI-based servers such as `uvicorn` are recommended to ensure scalability and performance.
